@@ -91,3 +91,21 @@ frontend/.env.local
 .DS_Store
 ehthumbs.db
 Desktop.ini
+
+# Credentials & Sensitive Files
+*.pem
+*.key
+*.cer
+*.crt
+*.p12
+*.pfx
+secrets.json
+credentials.json
+client_secret.json
+token.pickle
+*.tok
+auth.json
+.npmrc
+.netrc
+_netrc
+*config.local.*
