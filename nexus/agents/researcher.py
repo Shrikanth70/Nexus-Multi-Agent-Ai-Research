@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
-from nexus.core.state import AgentName, Evidence, NexusState, TaskStatus
+from nexus.core.state import AgentName, Evidence, NexusState, TaskStatus, AgentOutput
 from nexus.prompts.system_prompts import RESEARCHER_PROMPT
 
 logger = structlog.get_logger(__name__)
@@ -41,8 +41,9 @@ class ResearcherAgent(BaseAgent):
     def name(self) -> AgentName:
         return AgentName.RESEARCHER
         
-    def execute(self, state: NexusState) -> NexusState:
+    def execute(self, state: NexusState) -> AgentOutput:
         logger.info(f"{self.name.value} executing...", session_id=state.session_id)
+        logs = []
         
         pending_tasks = [t for t in state.plan.tasks if t.status == TaskStatus.PENDING]
         
@@ -50,6 +51,7 @@ class ResearcherAgent(BaseAgent):
             # We process one task at a time to keep LLM context focused
             current_task = pending_tasks[0]
             logger.info(f"Researching task: {current_task.id}")
+            logs.append(f"Researching task: {current_task.id}")
             
             # 1. Generate optimal search query
             query_prompt = ChatPromptTemplate.from_messages([
@@ -124,4 +126,9 @@ class ResearcherAgent(BaseAgent):
         else:
             state.current_agent = AgentName.FACT_CHECKER
             
-        return state
+        return AgentOutput(
+            agent=self.name.value,
+            status="success",
+            data=state.model_dump(),
+            logs=logs
+        )

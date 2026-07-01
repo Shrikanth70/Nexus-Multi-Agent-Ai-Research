@@ -14,6 +14,15 @@ import uuid
 from pydantic import BaseModel, Field
 
 
+class AgentOutput(BaseModel):
+    """Standardized output contract for all agents."""
+    agent: str = Field(..., description="The name of the agent that produced this output.")
+    status: str = Field(..., description="Status of the agent execution (e.g., 'success', 'error').")
+    data: Dict[str, Any] = Field(default_factory=dict, description="The specific mutations to apply to the state.")
+    logs: List[str] = Field(default_factory=list, description="Execution logs from the agent.")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
 class AgentName(str, Enum):
     """Enumeration of all valid agents in the system."""
     PLANNER = "Planner"

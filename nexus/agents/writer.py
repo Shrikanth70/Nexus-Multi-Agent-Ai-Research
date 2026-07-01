@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
-from nexus.core.state import AgentName, NexusState
+from nexus.core.state import AgentName, NexusState, AgentOutput
 
 from nexus.prompts.system_prompts import WRITER_PROMPT
 
@@ -30,11 +30,13 @@ class WriterAgent(BaseAgent):
     def name(self) -> AgentName:
         return AgentName.WRITER
         
-    def execute(self, state: NexusState) -> NexusState:
+    def execute(self, state: NexusState) -> AgentOutput:
         logger.info(f"{self.name.value} executing...", session_id=state.session_id)
+        logs = []
         
         if not state.analysis_notes:
             logger.warning("No analysis notes available to write about.")
+            logs.append("No analysis notes available to write about.")
             
         notes_text = "\n".join([f"- {note}" for note in state.analysis_notes])
         
@@ -55,4 +57,10 @@ class WriterAgent(BaseAgent):
         state.draft.revisions += 1
         
         state.current_agent = AgentName.REVIEWER
-        return state
+        logs.append(f"Draft written (revision {state.draft.revisions}).")
+        return AgentOutput(
+            agent=self.name.value,
+            status="success",
+            data=state.model_dump(),
+            logs=logs
+        )

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
-from nexus.core.state import AgentName, NexusState, ResearchTask, TaskStatus
+from nexus.core.state import AgentName, NexusState, ResearchTask, TaskStatus, AgentOutput
 from nexus.prompts.system_prompts import PLANNER_PROMPT
 
 logger = structlog.get_logger(__name__)
@@ -30,11 +30,13 @@ class PlannerAgent(BaseAgent):
     def name(self) -> AgentName:
         return AgentName.PLANNER
         
-    def execute(self, state: NexusState) -> NexusState:
+    def execute(self, state: NexusState) -> AgentOutput:
         logger.info(f"{self.name.value} executing...", session_id=state.session_id)
+        logs = []
         
         if not state.plan.tasks:
             logger.info("Generating task decomposition via LLM.")
+            logs.append("Generating task decomposition via LLM.")
             
             prompt = ChatPromptTemplate.from_messages([
                 ("system", PLANNER_PROMPT),
@@ -48,7 +50,14 @@ class PlannerAgent(BaseAgent):
             
             state.plan.tasks = result.tasks
             state.plan.status = TaskStatus.IN_PROGRESS
+            logs.append(f"Generated {len(result.tasks)} tasks.")
             
         # Route to the next agent
         state.current_agent = AgentName.RESEARCHER
-        return state
+        
+        return AgentOutput(
+            agent=self.name.value,
+            status="success",
+            data=state.model_dump(),
+            logs=logs
+        )

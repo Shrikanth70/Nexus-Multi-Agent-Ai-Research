@@ -1,5 +1,5 @@
 """
-Phase 2: Streamlit Frontend.
+Phase 4: Streamlit Frontend.
 
 This UI visualizes the execution of the LangGraph StateMachine.
 """
@@ -82,7 +82,7 @@ if "workflow_status" not in st.session_state:
 # ==========================================
 with st.sidebar:
     st.title("🧠 Nexus Control")
-    st.markdown("Phase 2: LangGraph LLM Orchestration.")
+    st.markdown("Phase 4: Production Multi-Agent Research Pipeline.")
     
     st.divider()
     
@@ -95,7 +95,7 @@ with st.sidebar:
     st.markdown("- 📋 **Reviewer** (Quality control)")
     
     st.divider()
-    st.caption("Nexus Framework v0.2.0 | Phase 2")
+    st.caption("Nexus Framework v0.4.0 | Phase 4")
 
 
 # ==========================================
@@ -139,39 +139,66 @@ if st.session_state.workflow_status == "running":
     with viz_col:
         st.subheader("Graph Execution")
         status_box = st.empty()
-        log_container = st.container()
+        
+        st.markdown("### Execution Status")
+        stepper_box = st.empty()
+        
+        st.markdown("### Execution Timeline")
+        timeline_container = st.container()
         
     with state_col:
         st.subheader("Shared State (Live)")
+        state_metrics_box = st.empty()
         state_view = st.empty()
         
     # Prepare the initial state
     current_state = st.session_state.nexus_state
     
-    # Run the graph! stream() yields (node_name, state_update)
-    # Because we return the full NexusState object from our agents, the state_update IS the NexusState.
     status_box.info("🟢 Starting LangGraph Execution...")
     
     try:
-        for output in workflow_graph.stream(current_state):
-            # Output is a dict: {node_name: NexusState}
-            for node_name, state_obj in output.items():
+        # workflow_graph.stream yields a dict of updates from the graph.
+        for output in workflow_graph.stream(current_state.model_dump()):
+            for node_name, state_dict in output.items():
+                # Enforce Pydantic validation because state_dict is a dict, not a NexusState object.
+                valid_state = NexusState.model_validate(state_dict)
+                
                 with viz_col:
-                    log_container.success(f"✅ Node **{node_name}** executed successfully.")
+                    # Update timeline
+                    timestamp = valid_state.errors[-1].timestamp.strftime('%H:%M:%S') if valid_state.errors and node_name == valid_state.errors[-1].agent_name.value else "completed"
+                    timeline_container.success(f"✅ [{node_name}] Executed successfully.")
                     
-                # Update UI State View
+                    # Update Stepper
+                    all_agents = ["Planner", "Researcher", "FactChecker", "Analyst", "Writer", "Reviewer"]
+                    current_idx = all_agents.index(valid_state.current_agent.value) if valid_state.current_agent.value in all_agents else len(all_agents)
+                    stepper_md = ""
+                    for i, ag in enumerate(all_agents):
+                        if i < current_idx:
+                            stepper_md += f"{ag} ✅ | "
+                        elif i == current_idx:
+                            stepper_md += f"**{ag} ⏳** | "
+                        else:
+                            stepper_md += f"{ag} ⏸️ | "
+                    stepper_box.markdown(stepper_md.strip(" | "))
+                    
                 with state_col:
-                    # state_obj is our NexusState Pydantic model
-                    state_json = state_obj.model_dump_json(indent=2)
+                    state_metrics_box.markdown(f"**Current Agent:** {valid_state.current_agent.value} | **Retries:** {valid_state.retry_count} | **Errors:** {len(valid_state.errors)}")
+                    state_json = valid_state.model_dump_json(indent=2)
                     state_view.markdown(f'<div class="json-viewer"><pre>{state_json}</pre></div>', unsafe_allow_html=True)
                 
-                # Persist the latest state
-                current_state = state_obj
+                # Persist the latest valid state
+                current_state = valid_state
                 st.session_state.nexus_state = current_state
                 
     except Exception as e:
-        st.error(f"Graph execution failed: {str(e)}")
+        import traceback
         st.session_state.workflow_status = "error"
+        with viz_col:
+            st.error("❌ Graph Execution Failed")
+            st.markdown("### Structured Error Report")
+            st.warning(f"**Reason:** {str(e)}\n\n**Origin:** `workflow_graph.stream`")
+            with st.expander("Stack Trace"):
+                st.code(traceback.format_exc(), language="python")
         
     if st.session_state.workflow_status != "error":
         st.session_state.workflow_status = "completed"

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
-from nexus.core.state import AgentName, NexusState
+from nexus.core.state import AgentName, NexusState, AgentOutput
 
 from nexus.prompts.system_prompts import FACT_CHECKER_PROMPT
 
@@ -36,16 +36,24 @@ class FactCheckerAgent(BaseAgent):
     def name(self) -> AgentName:
         return AgentName.FACT_CHECKER
         
-    def execute(self, state: NexusState) -> NexusState:
+    def execute(self, state: NexusState) -> AgentOutput:
         logger.info(f"{self.name.value} executing...", session_id=state.session_id)
+        logs = []
         
         unvalidated_evidence = [e for e in state.evidence if not e.validated]
         
         if not unvalidated_evidence:
             state.current_agent = AgentName.ANALYST
-            return state
+            logs.append("No unvalidated evidence found. Routing to Analyst.")
+            return AgentOutput(
+                agent=self.name.value,
+                status="success",
+                data=state.model_dump(),
+                logs=logs
+            )
 
         logger.info(f"Fact checking {len(unvalidated_evidence)} pieces of evidence.")
+        logs.append(f"Fact checking {len(unvalidated_evidence)} pieces of evidence.")
         
         evidence_text = "\n".join([f"ID: {e.id} | Claim: {e.content} | Source: {e.source}" for e in unvalidated_evidence])
         
@@ -84,7 +92,14 @@ class FactCheckerAgent(BaseAgent):
             # Loop back to Researcher to fix it
             # In a real system, we'd append a new task to research the rejected claims
             state.current_agent = AgentName.RESEARCHER
+            logs.append("Routing back to Researcher due to failed validations.")
         else:
             state.current_agent = AgentName.ANALYST
+            logs.append("All evidence validated. Routing to Analyst.")
             
-        return state
+        return AgentOutput(
+            agent=self.name.value,
+            status="success",
+            data=state.model_dump(),
+            logs=logs
+        )

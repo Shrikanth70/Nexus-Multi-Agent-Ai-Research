@@ -8,7 +8,7 @@ They take a NexusState, execute their specialized logic, and return a mutated Ne
 from abc import ABC, abstractmethod
 import structlog
 
-from nexus.core.state import AgentName, NexusState
+from nexus.core.state import AgentName, NexusState, AgentOutput
 
 logger = structlog.get_logger(__name__)
 
@@ -32,7 +32,7 @@ class BaseAgent(ABC):
         pass
         
     @abstractmethod
-    def execute(self, state: NexusState) -> NexusState:
+    def execute(self, state: NexusState) -> "AgentOutput":
         """
         The core agent logic.
         
@@ -40,6 +40,6 @@ class BaseAgent(ABC):
             state: The current Shared State.
             
         Returns:
-            The mutated Shared State.
+            The structured AgentOutput containing the mutated data.
         """
         pass
