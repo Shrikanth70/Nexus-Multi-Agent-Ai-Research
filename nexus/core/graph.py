@@ -41,11 +41,10 @@ def create_agent_node(agent_name: AgentName):
         # LangGraph may pass a dict over streaming channels. Enforce Pydantic validation.
         state = NexusState.model_validate(state_dict)
         # Loop limit protection
-        if state.retry_count >= settings.nexus_max_retry_count:
+        if state.retry_count > settings.nexus_max_retry_count:
             logger.error("Max retries exceeded", session_id=state.session_id)
             state.is_paused_for_human = True
             state.current_agent = AgentName.SYSTEM
-            # Returning the state here instead of raising allows LangGraph to persist the error state.
             # Returning the state here instead of raising allows LangGraph to persist the error state.
             return state.model_dump()
             

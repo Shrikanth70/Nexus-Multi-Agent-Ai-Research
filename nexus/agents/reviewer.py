@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
 from nexus.core.state import AgentName, NexusState, AgentOutput
+from nexus.config import settings
 
 from nexus.prompts.system_prompts import REVIEWER_PROMPT
 
@@ -59,10 +60,14 @@ class ReviewerAgent(BaseAgent):
             "draft": state.draft.content
         })
         
-        if result.approved:
-            logger.info("Draft approved by Reviewer.")
+        if result.approved or state.retry_count >= settings.nexus_max_retry_count:
+            if not result.approved:
+                logger.warning("Max retries reached. Accepting current draft.", feedback=result.feedback)
+                logs.append("Max retries reached. Accepting current draft.")
+            else:
+                logger.info("Draft approved by Reviewer.")
+                logs.append("Draft approved by Reviewer.")
             state.current_agent = AgentName.SYSTEM
-            logs.append("Draft approved by Reviewer.")
         else:
             logger.warning("Draft rejected by Reviewer.", feedback=result.feedback)
             state.add_error(
@@ -74,7 +79,7 @@ class ReviewerAgent(BaseAgent):
             
         return AgentOutput(
             agent=self.name.value,
-            status="success" if result.approved else "error",
+            status="success" if (result.approved or state.retry_count >= settings.nexus_max_retry_count) else "error",
             data=state.model_dump(),
             logs=logs
         )

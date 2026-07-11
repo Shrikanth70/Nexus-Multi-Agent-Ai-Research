@@ -10,7 +10,15 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from nexus.agents.base import BaseAgent
-from nexus.core.state import AgentName, NexusState, AgentOutput
+from nexus.core.state import (
+    AgentName,
+    NexusState,
+    AgentOutput,
+    ErrorRecord,
+    ResearchTask,
+    TaskStatus,
+)
+from nexus.config import settings
 
 from nexus.prompts.system_prompts import FACT_CHECKER_PROMPT
 
@@ -40,11 +48,23 @@ class FactCheckerAgent(BaseAgent):
         logger.info(f"{self.name.value} executing...", session_id=state.session_id)
         logs = []
         
-        unvalidated_evidence = [e for e in state.evidence if not e.validated]
+        unvalidated_evidence = [e for e in state.evidence if e.validation_reason is None]
         
         if not unvalidated_evidence:
-            state.current_agent = AgentName.ANALYST
-            logs.append("No unvalidated evidence found. Routing to Analyst.")
+            valid_evidence = [e for e in state.evidence if e.validated]
+            if valid_evidence or state.retry_count >= settings.nexus_max_retry_count:
+                state.current_agent = AgentName.ANALYST
+                logs.append("No unvalidated evidence found. Routing to Analyst.")
+            else:
+                state.retry_count += 1
+                state.plan.tasks.append(
+                    ResearchTask(
+                        description=f"Gather reliable and credible evidence for: {state.user_query}",
+                        status=TaskStatus.PENDING,
+                    )
+                )
+                state.current_agent = AgentName.RESEARCHER
+                logs.append("No valid evidence found. Routing back to Researcher.")
             return AgentOutput(
                 agent=self.name.value,
                 status="success",
@@ -69,8 +89,6 @@ class FactCheckerAgent(BaseAgent):
             "evidence": evidence_text
         })
         
-        has_errors = False
-        
         # Apply evaluations to state
         for eval_res in result.evaluations:
             # Find the original evidence object
@@ -80,22 +98,32 @@ class FactCheckerAgent(BaseAgent):
                 ev.validation_reason = eval_res.validation_reason
                 
                 if not ev.validated:
-                    has_errors = True
-                    state.add_error(
-                        agent=self.name,
-                        message=f"Evidence {ev.id} failed validation.",
-                        context={"source": ev.source, "reason": ev.validation_reason}
+                    state.errors.append(
+                        ErrorRecord(
+                            agent_name=self.name,
+                            error_message=f"Evidence {ev.id} failed validation.",
+                            context={"source": ev.source, "reason": ev.validation_reason}
+                        )
                     )
                     logger.warning(f"Evidence {ev.id} rejected: {ev.validation_reason}")
 
-        if has_errors:
-            # Loop back to Researcher to fix it
-            # In a real system, we'd append a new task to research the rejected claims
+        valid_evidence = [e for e in state.evidence if e.validated]
+        if valid_evidence:
+            state.current_agent = AgentName.ANALYST
+            logs.append("Validated evidence available. Routing to Analyst.")
+        elif state.retry_count < settings.nexus_max_retry_count:
+            state.retry_count += 1
+            state.plan.tasks.append(
+                ResearchTask(
+                    description=f"Gather reliable and credible evidence for: {state.user_query}",
+                    status=TaskStatus.PENDING,
+                )
+            )
             state.current_agent = AgentName.RESEARCHER
-            logs.append("Routing back to Researcher due to failed validations.")
+            logs.append("All evidence failed validation. Routing back to Researcher with new task.")
         else:
             state.current_agent = AgentName.ANALYST
-            logs.append("All evidence validated. Routing to Analyst.")
+            logs.append("Max retries reached. Routing to Analyst with available evidence.")
             
         return AgentOutput(
             agent=self.name.value,

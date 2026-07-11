@@ -6,7 +6,7 @@ Per STATE.md, all communication between agents occurs through these typed object
 No hidden string prompts or untyped dictionaries are allowed.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
@@ -20,7 +20,7 @@ class AgentOutput(BaseModel):
     status: str = Field(..., description="Status of the agent execution (e.g., 'success', 'error').")
     data: Dict[str, Any] = Field(default_factory=dict, description="The specific mutations to apply to the state.")
     logs: List[str] = Field(default_factory=list, description="Execution logs from the agent.")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AgentName(str, Enum):
@@ -76,7 +76,7 @@ class DraftReport(BaseModel):
 
 class ErrorRecord(BaseModel):
     """Tracks failures to prevent infinite loops and provide feedback."""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_name: AgentName
     error_message: str
     context: Dict[str, Any] = Field(default_factory=dict)

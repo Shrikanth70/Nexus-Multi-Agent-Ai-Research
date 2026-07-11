@@ -39,10 +39,12 @@ class WriterAgent(BaseAgent):
             logs.append("No analysis notes available to write about.")
             
         notes_text = "\n".join([f"- {note}" for note in state.analysis_notes])
+        reviewer_feedback = [err.error_message for err in state.errors if err.agent_name == AgentName.REVIEWER]
+        feedback_section = "\n\nPrevious Reviewer Feedback to Address:\n" + "\n".join(reviewer_feedback) if reviewer_feedback else ""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", WRITER_PROMPT),
-            ("user", "User Query: {query}\n\nAnalysis Notes:\n{notes}")
+            ("user", "User Query: {query}\n\nAnalysis Notes:\n{notes}{feedback}")
         ])
         
         # We can use structured output to ensure we just get the markdown string and no conversational filler.
@@ -50,7 +52,8 @@ class WriterAgent(BaseAgent):
         
         result: WriterOutput = chain.invoke({ # type: ignore
             "query": state.user_query,
-            "notes": notes_text
+            "notes": notes_text,
+            "feedback": feedback_section
         })
         
         state.draft.content = result.draft_markdown

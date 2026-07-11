@@ -41,11 +41,12 @@ def test_planner_agent(mock_chain_invoke) -> None:
         ]
     )
     
-    new_state = agent.execute(state)
+    output = agent.execute(state)
     
-    assert new_state.current_agent == AgentName.RESEARCHER
-    assert len(new_state.plan.tasks) == 2
-    assert new_state.plan.status == TaskStatus.IN_PROGRESS
+    assert output.status == "success"
+    assert state.current_agent == AgentName.RESEARCHER
+    assert len(state.plan.tasks) == 2
+    assert state.plan.status == TaskStatus.IN_PROGRESS
     assert mock_chain_invoke.called
 
 
@@ -64,12 +65,13 @@ def test_researcher_agent(mock_chain_invoke, mock_tools) -> None:
         )
     ]
     
-    new_state = agent.execute(state)
+    output = agent.execute(state)
     
     # Should resolve the single task and move to FactChecker
-    assert new_state.plan.tasks[0].status == TaskStatus.COMPLETED
-    assert len(new_state.evidence) == 1
-    assert new_state.current_agent == AgentName.FACT_CHECKER
+    assert output.status == "success"
+    assert state.plan.tasks[0].status == TaskStatus.COMPLETED
+    assert len(state.evidence) == 1
+    assert state.current_agent == AgentName.FACT_CHECKER
     assert mock_chain_invoke.call_count == 2
 
 
@@ -86,10 +88,11 @@ def test_fact_checker_success(mock_chain_invoke) -> None:
         ]
     )
     
-    new_state = agent.execute(state)
+    output = agent.execute(state)
     
-    assert new_state.current_agent == AgentName.ANALYST
-    assert new_state.evidence[0].validated is True
+    assert output.status == "success"
+    assert state.current_agent == AgentName.ANALYST
+    assert state.evidence[0].validated is True
 
 
 @pytest.mark.unit
@@ -105,8 +108,9 @@ def test_fact_checker_rejection(mock_chain_invoke) -> None:
         ]
     )
     
-    new_state = agent.execute(state)
+    output = agent.execute(state)
     
-    assert new_state.current_agent == AgentName.RESEARCHER  # Loop back
-    assert new_state.evidence[0].validated is False
-    assert len(new_state.errors) == 1
+    assert output.status == "success"
+    assert state.current_agent == AgentName.RESEARCHER  # Loop back
+    assert state.evidence[0].validated is False
+    assert len(state.errors) == 1
